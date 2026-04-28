@@ -246,16 +246,18 @@ class SGuardContentRunner:
             self.category_ids.append([safe_id, unsafe_id])
 
         if missing:
-            # 경고 후 계속 진행 (일부 카테고리만 사용 가능한 경우 처리)
+            added = [str(v) for v in tokenizer.added_tokens_decoder.values()]
+            safe_unsafe = [t for t in added if "safe" in t.lower() or "unsafe" in t.lower()]
             print(
                 f"[SGuard] 경고: 다음 카테고리 토큰을 vocabulary에서 찾지 못했습니다: {missing}\n"
-                "  tokenizer.added_tokens_decoder를 확인하거나 CATEGORY_TOKEN_PAIRS를 수정하세요."
+                f"  vocabulary의 safe/unsafe 관련 토큰 목록: {safe_unsafe or '(없음)'}\n"
+                "  CATEGORY_TOKEN_PAIRS를 위 토큰명으로 수정하세요."
             )
 
     @torch.inference_mode()
     def classify(self, prompt: str, response: str, max_new_tokens: int = 5) -> Dict[str, Any]:
-        # SGuard의 chat template은 role/content 형식이 아니라 prompt/response 키를 직접 사용함.
-        messages = [{"prompt": prompt.strip(), "response": response.strip()}]
+        # SGuard의 chat template은 role + prompt/response 키를 함께 요구함.
+        messages = [{"role": "user", "prompt": prompt.strip(), "response": response.strip()}]
         inputs = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,

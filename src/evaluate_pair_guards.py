@@ -221,12 +221,12 @@ class SGuardContentRunner:
     # SGuard는 카테고리별로 <SAFE_{cat}> / <UNSAFE_{cat}> 형태의 특수 토큰을 생성함.
     # 토큰 이름을 직접 조회해 ID를 얻어야 위치 기반 추정 오류를 피할 수 있음.
     CATEGORY_TOKEN_PAIRS = [
-        ("<SAFE_CRIME>",        "<UNSAFE_CRIME>"),
-        ("<SAFE_MANIPULATION>", "<UNSAFE_MANIPULATION>"),
-        ("<SAFE_PRIVACY>",      "<UNSAFE_PRIVACY>"),
-        ("<SAFE_SEXUAL>",       "<UNSAFE_SEXUAL>"),
-        ("<SAFE_VIOLENCE>",     "<UNSAFE_VIOLENCE>"),
-    ]
+    ("Crime: safe\n",        "Crime: unsafe\n"),
+    ("Manipulation: safe\n", "Manipulation: unsafe\n"),
+    ("Privacy: safe\n",      "Privacy: unsafe\n"),
+    ("Sexual: safe\n",       "Sexual: unsafe\n"),
+    ("Violence: safe",       "Violence: unsafe"),   # \n 없음
+]
 
     def __init__(self, model: Any, tokenizer: Any, thresholds: List[float]):
         self.model = model

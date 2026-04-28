@@ -254,10 +254,8 @@ class SGuardContentRunner:
 
     @torch.inference_mode()
     def classify(self, prompt: str, response: str, max_new_tokens: int = 5) -> Dict[str, Any]:
-        # Bug 2 수정: apply_chat_template은 content 키를 요구함.
-        # SGuard 모델 카드의 실제 입력 포맷에 따라 content 문자열을 구성.
-        content = f"[PROMPT]\n{prompt.strip()}\n\n[RESPONSE]\n{response.strip()}" if response else prompt.strip()
-        messages = [{"role": "user", "content": content}]
+        # SGuard의 chat template은 role/content 형식이 아니라 prompt/response 키를 직접 사용함.
+        messages = [{"prompt": prompt.strip(), "response": response.strip()}]
         inputs = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,

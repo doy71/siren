@@ -183,21 +183,20 @@ class KananaGuardRunner:
             {"role": "assistant", "content": response},
         ]
         # Bug 3 수정: add_generation_prompt=True 없으면 분류 토큰 생성 시작 신호가 없음
-        input_ids = self.tokenizer.apply_chat_template(
-            messages, tokenize=True, return_tensors="pt", add_generation_prompt=True
+        inputs = self.tokenizer.apply_chat_template(
+            messages, tokenize=True, return_tensors="pt", add_generation_prompt=True,
+            return_dict=True,
         )
-        input_ids = input_ids.to(get_input_device(self.model))
-        attention_mask = torch.ones_like(input_ids)
+        inputs = {k: v.to(get_input_device(self.model)) for k, v in inputs.items()}
         output = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=self.tokenizer.eos_token_id,
             return_dict_in_generate=True,
             output_scores=True,
         )
-        gen_ids = output.sequences[0, input_ids.shape[-1]:]
+        gen_ids = output.sequences[0, inputs["input_ids"].shape[-1]:]
         raw = self.tokenizer.decode(gen_ids, skip_special_tokens=False).strip()
         first_token_id = int(gen_ids[0].detach().cpu()) if len(gen_ids) else None
 
@@ -337,25 +336,24 @@ class WildGuardKoRunner:
         else:
             classifier_prompt = WILDGUARD_FORMAT_PROMPT.format(prompt=prompt)
         messages = [{"role": "user", "content": classifier_prompt}]
-        input_ids = self.tokenizer.apply_chat_template(
+        # Bug 4 수정: output_scores=True + return_dict_in_generate=True로 첫 토큰 logit 수집
+        inputs = self.tokenizer.apply_chat_template(
             messages,
             add_generation_prompt=True,
             tokenize=True,
             return_tensors="pt",
+            return_dict=True,
         )
-        input_ids = input_ids.to(get_input_device(self.model))
-        attention_mask = torch.ones_like(input_ids)
-        # Bug 4 수정: output_scores=True + return_dict_in_generate=True로 첫 토큰 logit 수집
+        inputs = {k: v.to(get_input_device(self.model)) for k, v in inputs.items()}
         output = self.model.generate(
-            input_ids=input_ids,
-            attention_mask=attention_mask,
+            **inputs,
             max_new_tokens=max_new_tokens,
             do_sample=False,
             pad_token_id=self.tokenizer.eos_token_id,
             return_dict_in_generate=True,
             output_scores=True,
         )
-        text = self.tokenizer.decode(output.sequences[0, input_ids.shape[-1]:], skip_special_tokens=True).strip()
+        text = self.tokenizer.decode(output.sequences[0, inputs["input_ids"].shape[-1]:], skip_special_tokens=True).strip()
 
         harmful_request  = parse_yes_no_field(text, "Harmful request")
         response_refusal = parse_yes_no_field(text, "Response refusal")
@@ -375,7 +373,7 @@ class WildGuardKoRunner:
         # "Harmful response:" 다음 첫 응답 토큰의 logit을 사용.
         # 파싱된 필드에 해당하는 토큰 위치를 찾아 logit 기반 확률 계산.
         unsafe_prob = _wildguard_unsafe_prob(
-            output.scores, output.sequences[0, input_ids.shape[-1]:],
+            output.scores, output.sequences[0, inputs["input_ids"].shape[-1]:],
             self.tokenizer, self.yes_ids, self.no_ids, self.decision,
         )
 

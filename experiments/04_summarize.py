@@ -1,18 +1,8 @@
 #!/usr/bin/env python3
-"""
-Step 4: 실험 결과 요약 출력
+"""Step 4/5: 분석 결과 요약 출력.
 
-analyze.py가 생성한 CSV들을 읽어 논문/발표용 비교 테이블을 터미널에 출력하고
+analyze.py가 생성한 CSV들을 읽어 전체 evaluator 비교를 터미널에 출력하고
 results/analysis/experiment_summary.md 로 저장합니다.
-
-핵심 질문:
-  Q1. 두 SIREN 모델의 EN F1 vs KO F1 차이는?
-  Q2. EN→KO 레이블 flip rate (language consistency)는?
-  Q3. 두 모델 중 KO 성능 하락이 더 적은 모델은?
-
-Usage:
-    python experiments/04_summarize.py
-    python experiments/04_summarize.py --analysis-dir results/analysis
 """
 from __future__ import annotations
 
@@ -26,8 +16,13 @@ except ImportError:
 
 
 EVALUATOR_DISPLAY = {
-    "siren_qwen3_4b":    "SIREN-Qwen3-4B",
+    "siren_qwen3_4b": "SIREN-Qwen3-4B",
     "siren_llama3_1_8b": "SIREN-Llama-3.1-8B",
+    "kanana_safeguard_8b": "Kanana Safeguard 8B",
+    "sguard_content_filter_2b": "SGuard ContentFilter 2B",
+    "wildguard_ko_3b": "WildGuard-ko 3B",
+    "llama_guard": "Llama Guard 3",
+    "kosafeguard": "KoSafeGuard",
 }
 
 
@@ -38,6 +33,10 @@ def fmt(val) -> str:
         return f"{float(val):.4f}"
     except (TypeError, ValueError):
         return str(val)
+
+
+def display(ev: str) -> str:
+    return EVALUATOR_DISPLAY.get(ev, ev)
 
 
 def main() -> None:
@@ -52,87 +51,81 @@ def main() -> None:
         print(s)
         lines.append(s)
 
-    emit("# Ko-SIREN Experiment: BeaverTails EN vs KO")
+    emit("# Prompt-Response Safety Guard Experiment: BeaverTails EN vs KO")
     emit(f"분석 디렉토리: {adir}")
     emit()
 
-    # ------------------------------------------------------------------
-    # Table 1: Overall metrics (EN / KO 별 F1, AUROC)
-    # ------------------------------------------------------------------
     t1_path = adir / "table1_overall_metrics.csv"
     if t1_path.exists():
         t1 = pd.read_csv(t1_path)
+        t1["_name"] = t1["evaluator"].map(display)
+        evaluators = sorted(t1["evaluator"].dropna().unique().tolist(), key=lambda x: display(x))
+
         emit("## Table 1. Overall Metrics (EN / KO)")
         emit()
-        emit(f"{'Evaluator':<25} {'Lang':<6} {'N':>5} {'Acc':>8} {'F1':>8} {'Recall':>8} {'AUROC':>8}")
-        emit("-" * 75)
-        for ev in ["siren_qwen3_4b", "siren_llama3_1_8b"]:
+        emit(f"{'Evaluator':<30} {'Lang':<6} {'N':>5} {'Acc':>8} {'F1':>8} {'Recall':>8} {'AUROC':>8}")
+        emit("-" * 82)
+        for ev in evaluators:
             for lang in ["en", "ko"]:
                 sub = t1[(t1["evaluator"] == ev) & (t1["lang"] == lang)]
                 if sub.empty:
                     continue
                 r = sub.iloc[0]
-                display = EVALUATOR_DISPLAY.get(ev, ev)
                 emit(
-                    f"{display:<25} {lang:<6} {int(r['n']):>5} "
+                    f"{display(ev):<30} {lang:<6} {int(r['n']):>5} "
                     f"{fmt(r.get('accuracy')):>8} "
                     f"{fmt(r.get('f1_unsafe')):>8} "
                     f"{fmt(r.get('recall_unsafe')):>8} "
                     f"{fmt(r.get('auroc')):>8}"
                 )
-            emit()  # blank line between models
+            emit()
         emit()
 
-        # EN vs KO F1 drop
-        emit("### EN → KO F1 하락")
-        emit(f"{'Evaluator':<25} {'F1(EN)':>10} {'F1(KO)':>10} {'Drop':>10}")
-        emit("-" * 55)
-        for ev in ["siren_qwen3_4b", "siren_llama3_1_8b"]:
+        emit("### EN → KO F1 변화")
+        emit(f"{'Evaluator':<30} {'F1(EN)':>10} {'F1(KO)':>10} {'EN-KO':>10}")
+        emit("-" * 65)
+        for ev in evaluators:
             en_row = t1[(t1["evaluator"] == ev) & (t1["lang"] == "en")]
             ko_row = t1[(t1["evaluator"] == ev) & (t1["lang"] == "ko")]
             if en_row.empty or ko_row.empty:
                 continue
             f1_en = float(en_row.iloc[0].get("f1_unsafe", float("nan")))
             f1_ko = float(ko_row.iloc[0].get("f1_unsafe", float("nan")))
-            drop = f1_en - f1_ko
-            display = EVALUATOR_DISPLAY.get(ev, ev)
-            emit(f"{display:<25} {f1_en:>10.4f} {f1_ko:>10.4f} {drop:>+10.4f}")
+            emit(f"{display(ev):<30} {fmt(f1_en):>10} {fmt(f1_ko):>10} {f1_en - f1_ko:>+10.4f}")
         emit()
     else:
         emit(f"⚠️  {t1_path} 없음. analyze.py를 먼저 실행하세요.")
         emit()
 
-    # ------------------------------------------------------------------
-    # Table 4: Language consistency (EN↔KO flip rate)
-    # ------------------------------------------------------------------
     t4_path = adir / "table4_language_consistency.csv"
     if t4_path.exists():
         t4 = pd.read_csv(t4_path)
+        if not t4.empty:
+            t4["evaluator_name"] = t4["evaluator"].map(display)
         emit("## Table 4. Language Consistency (EN↔KO Label Flip)")
         emit()
-        # 컬럼 명은 analyze.py 구현에 따라 다를 수 있으므로 방어적으로 처리
-        emit(t4.to_string(index=False))
+        cols = [c for c in ["evaluator_name", "n_pairs", "consistency", "label_flip_rate", "mean_abs_score_gap"] if c in t4.columns]
+        emit(t4[cols].to_string(index=False) if cols else t4.to_string(index=False))
         emit()
-
-        # flip rate 추출 시도
-        flip_col = next((c for c in t4.columns if "flip" in c.lower() or "inconsist" in c.lower()), None)
-        if flip_col and "evaluator" in t4.columns:
-            emit("### Flip Rate 비교")
-            for ev in ["siren_qwen3_4b", "siren_llama3_1_8b"]:
-                sub = t4[t4["evaluator"] == ev]
-                if sub.empty:
-                    continue
-                display = EVALUATOR_DISPLAY.get(ev, ev)
-                rate = sub.iloc[0][flip_col]
-                emit(f"  {display}: {fmt(rate)}")
-            emit()
     else:
         emit(f"⚠️  {t4_path} 없음.")
         emit()
 
-    # ------------------------------------------------------------------
-    # 그림 목록
-    # ------------------------------------------------------------------
+    t6_path = adir / "table6_pairwise_disagreement.csv"
+    if t6_path.exists():
+        t6 = pd.read_csv(t6_path)
+        emit("## Table 6. Pairwise Disagreement")
+        emit()
+        if not t6.empty:
+            shown = t6.copy()
+            shown["evaluator_a_name"] = shown["evaluator_a"].map(display)
+            shown["evaluator_b_name"] = shown["evaluator_b"].map(display)
+            cols = ["lang", "evaluator_a_name", "evaluator_b_name", "n_pairs", "disagreement_rate", "cohen_kappa"]
+            emit(shown[cols].to_string(index=False))
+        else:
+            emit("<empty>")
+        emit()
+
     fig_dir = adir / "figures"
     if fig_dir.exists():
         figs = sorted(fig_dir.glob("*.png"))
@@ -142,24 +135,14 @@ def main() -> None:
                 emit(f"  - {f}")
             emit()
 
-    # ------------------------------------------------------------------
-    # 해석 가이드
-    # ------------------------------------------------------------------
     emit("## 해석 가이드")
     emit()
-    emit("- **F1 Drop > 0.05**: 모델이 KO 입력에서 유의미하게 성능 저하")
-    emit("- **F1 Drop ≈ 0**: 모델이 언어 변화에 robust (KO safety 일반화 성공)")
-    emit("- **Flip Rate 높음**: 같은 샘플에 대해 EN/KO 예측이 다름 → 언어 편향")
-    emit("- **AUROC(KO) < AUROC(EN)**: 확률 분리 능력 자체가 KO에서 약해짐")
-    emit()
-    emit("논문/발표 핵심 논점:")
-    emit("  RQ1. 영어 전용 SIREN이 KO에서도 충분한 recall을 유지하는가?")
-    emit("  RQ2. 두 모델의 KO 일반화 능력 차이는 backbone 아키텍처와 연관되는가?")
+    emit("- **F1 EN-KO > 0.05**: 영어 대비 한국어에서 unsafe 탐지 성능이 눈에 띄게 낮아진 경우")
+    emit("- **Flip Rate 높음**: 같은 prompt-response 쌍을 번역했을 때 EN/KO 예측이 자주 바뀜")
+    emit("- **WildGuard-ko의 unsafe_prob**: 모델 카드 예시는 확률을 제공하지 않으므로 binary score로 저장됨")
+    emit("- **SGuard unsafe_prob**: 5개 카테고리 중 최대 unsafe 확률로 저장됨")
     emit()
 
-    # ------------------------------------------------------------------
-    # 저장
-    # ------------------------------------------------------------------
     out_path = adir / "experiment_summary.md"
     out_path.parent.mkdir(parents=True, exist_ok=True)
     with out_path.open("w", encoding="utf-8") as f:

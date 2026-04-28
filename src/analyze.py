@@ -29,6 +29,11 @@ EVALUATOR_DISPLAY = {
     "ksiren_llama_ko": "Ko-SIREN Llama train=KO",
     "ksiren_exaone_ko": "Ko-SIREN EXAONE train=KO",
     "ksiren_exaone_bi": "Ko-SIREN EXAONE train=BI",
+    "siren_qwen3_4b": "SIREN-Qwen3-4B",
+    "siren_llama3_1_8b": "SIREN-Llama-3.1-8B",
+    "kanana_safeguard_8b": "Kanana Safeguard 8B",
+    "sguard_content_filter_2b": "SGuard ContentFilter 2B",
+    "wildguard_ko_3b": "WildGuard-ko 3B",
 }
 
 

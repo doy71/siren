@@ -14,3 +14,4 @@ tqdm>=4.67.0
 matplotlib>=3.8.0
 optuna>=4.0.0
 llm-siren>=0.1.0
+hf_xet>=1.1.0

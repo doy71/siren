@@ -240,3 +240,69 @@ python src/inspect_siren_model.py \
   --checkpoints results/ksiren_qwen3_0_6b_bi results/ksiren_exaone3_5_2_4b_bi \
   --output results/analysis/selected_layer_summary.csv
 ```
+
+---
+
+## 추가: 한국어 prompt-response guard 모델 3종 평가
+
+`bash experiments/run_experiment.sh` 실행이 끝나서 아래 파일들이 이미 있는 상태라면,
+
+- `data/beavertails_500.jsonl`
+- `results/raw_predictions.jsonl`
+- `results/analysis/`
+
+다음 명령으로 같은 500개 EN/KO prompt-response 쌍에 대해 guard 모델 3종을 추가 평가할 수 있습니다.
+
+```bash
+bash experiments/05_eval_pair_guards.sh
+```
+
+추가되는 evaluator는 다음과 같습니다.
+
+- `kanana_safeguard_8b`: `kakaocorp/kanana-safeguard-8b`
+- `sguard_content_filter_2b`: `SamsungSDS-Research/SGuard-ContentFilter-2B-v1`
+- `wildguard_ko_3b`: `iknow-lab/llama-3.2-3B-wildguard-ko-2410`
+
+출력은 기존 SIREN 결과와 같은 파일에 append됩니다.
+
+```text
+results/raw_predictions.jsonl
+results/analysis/table1_overall_metrics.csv
+results/analysis/table4_language_consistency.csv
+results/analysis/table6_pairwise_disagreement.csv
+results/analysis/experiment_summary.md
+```
+
+GPU 메모리가 부족하면 4bit 로딩을 사용하세요.
+
+```bash
+bash experiments/05_eval_pair_guards.sh --load-in-4bit
+```
+
+한국어만 빠르게 확인하려면 다음처럼 실행할 수 있습니다.
+
+```bash
+bash experiments/05_eval_pair_guards.sh --langs ko
+```
+
+디버깅용으로 일부 샘플만 돌리려면 다음처럼 실행합니다.
+
+```bash
+bash experiments/05_eval_pair_guards.sh --limit 20 --load-in-4bit
+```
+
+이미 같은 evaluator 결과가 있는데 다시 덮어쓰고 싶다면 전체 파일을 지우지 말고 다음 옵션을 사용하세요.
+
+```bash
+bash experiments/05_eval_pair_guards.sh --overwrite-evaluator --load-in-4bit
+```
+
+### WildGuard-ko binary decision rule
+
+`wildguard_ko_3b`는 모델 출력이 다음 3개 필드로 나뉩니다.
+
+- `Harmful request`
+- `Response refusal`
+- `Harmful response`
+
+이 프로젝트의 BeaverTails binary label은 prompt-response 쌍 중 특히 응답 안전성 평가와 가장 잘 맞기 때문에, 기본값은 `Harmful response: yes`일 때 `unsafe`로 매핑합니다. 이 설정은 `experiments/05_eval_pair_guards.sh`의 `--wildguard-decision response` 부분에서 바꿀 수 있습니다.
